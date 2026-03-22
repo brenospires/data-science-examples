@@ -1,4 +1,4 @@
-# 📊 Data Science & Modeling Portfolio
+# Data Science & Modeling Portfolio
 
 Welcome to my portfolio repository.
 
@@ -6,7 +6,7 @@ This space contains selected projects demonstrating my work in **data science**,
 
 ---
 
-## 👋 About Me
+## About Me
 
 I am a data science specialist with experience in:
 
@@ -22,7 +22,7 @@ My work emphasizes business-driven assumptions and robust evaluation frameworks.
 
 ---
 
-## 🧠 Portfolio Goals
+## Portfolio Goals
 
 This repository serves as:
 
@@ -35,19 +35,6 @@ Projects may range from **theoretical explorations** to **applied business cases
 
 ---
 
-## 📁 Projects
-
-### 0) Pricing Under Limited Information About the Demand Function
-
-**Description**  
-Brief explanation of the problem being solved.
-
----
-
-*(More projects will be added over time.)*
-
----
-
-## 📫 Contact
+## Contact
 
 Feel free to reach out for discussion or collaboration.
