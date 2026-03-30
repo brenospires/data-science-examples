@@ -1,0 +1,38 @@
+# ---- Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- Virtual environments
+venv/
+.env/
+.venv/
+
+# ---- Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# ---- Unit test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Jupyter
+.ipynb_checkpoints/
+
+# ---- IDE
+.vscode/
+.idea/
+
+# ---- OS
+.DS_Store
+Thumbs.db
+
+# ---- Logs
+*.log
+
+# ---- Data files (important for ML projects)
+data/
+outputs/
+models/
