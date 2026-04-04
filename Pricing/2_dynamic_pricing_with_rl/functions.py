@@ -1,0 +1,202 @@
+import numpy as np
+import pandas as pd
+
+
+class MarketPriors:
+
+    def __init__(self):
+
+        # ===== demand level =====
+        self.alpha = 17.0              # base log demand
+        self.season_weight = 0.35      # payday boost
+
+        # ===== elasticity =====
+        self.elasticity = 2.5
+        self.season_elast_amp = 0.05   # reduces elasticity at peaks
+
+        # ===== price curvature =====
+        self.gamma = 0.01
+
+        # ===== competition =====
+        self.cross_elasticity = 1.0
+
+        # ===== shocks (time series behavior) =====
+        self.rho = 0.6
+        self.shock_std = 0.15
+
+        # ===== competitor dynamics =====
+        self.comp_mean = 120
+        self.comp_reversion = 0.05
+        self.comp_noise = 10.0
+
+        # ===== costs =====
+        self.unit_cost = 60
+        self.fixed_cost = 200
+
+        # ===== bounds =====
+        self.price_min = 100
+        self.price_max = 160
+
+        # strength of season x price interaction
+        self.psi = 0.5   
+
+        self.rel_price_weight = 0.3
+
+        self.comp_follow = 0.0
+
+def seasonal_shape(phase):
+    return np.exp(-((phase - 0.1) ** 2) / 0.08)
+
+def payday_effect(t, rng, period=30):
+
+    phase = (t % period) / period
+    cycle = t // period
+
+    # store amplitudes in dict (persistent)
+    if not hasattr(payday_effect, "cycle_amplitudes"):
+        payday_effect.cycle_amplitudes = {}
+
+    if cycle not in payday_effect.cycle_amplitudes:
+        payday_effect.cycle_amplitudes[cycle] = rng.lognormal(mean=0.0, sigma=0.3)
+
+    amplitude = payday_effect.cycle_amplitudes[cycle]
+
+    return amplitude * np.exp(-((phase - 0.1) ** 2) / 0.08)
+
+def update_competitor_price(last_comp, agent_price, priors, rng):
+
+    # partial follow + own inertia
+    comp_price = (
+        last_comp
+        + priors.comp_reversion * (priors.comp_mean - last_comp)
+        + priors.comp_follow * (agent_price - last_comp)
+        + rng.normal(0, priors.comp_noise)
+    )
+
+    return comp_price
+
+def compute_demand(price, comp_price, season, eta, priors):
+
+    log_price = np.log(price)
+    log_comp = np.log(comp_price)
+    rel_price = log_comp - log_price
+
+    base_log_mu = (priors.alpha + (priors.season_weight * season) + eta)
+    
+    elasticity_t = priors.elasticity * np.exp(-priors.season_elast_amp * season)
+    price_term = ((- elasticity_t * log_price) + (- priors.gamma * (log_price ** 2)))
+
+    rel_price_term = priors.rel_price_weight * rel_price
+
+    log_mu = base_log_mu + price_term + rel_price_term
+    mu = np.exp(log_mu)
+    
+    return np.clip(mu, 1, 2500)
+
+# def compute_demand(price, comp_price, season, eta, priors):
+
+#     log_price = np.log(price)
+#     log_comp = np.log(comp_price)
+
+#     elasticity_t = priors.elasticity * (1 - priors.season_elast_amp * season)
+
+#     # ===== base =====
+#     base = (
+#         priors.alpha
+#         + priors.season_weight * season
+#         + priors.cross_elasticity * log_comp
+#     )
+
+#     # ===== price =====
+#     price_term = (
+#         - elasticity_t * log_price
+#         - priors.gamma * (log_price ** 2)
+#     )
+
+#     # ===== interaction =====
+#     interaction = - priors.psi * season * log_price
+
+#     log_mu = base + price_term + interaction + eta
+
+#     mu = np.exp(log_mu)
+
+#     return np.clip(mu, 1, 2000)
+
+def demand_step(df_hist, policy_fn, priors, rng):
+
+    t = len(df_hist)
+    last_row = df_hist.iloc[-1]
+
+    # ===== decision at time t =====
+    price = policy_fn(df_hist, priors, rng)
+
+    # ===== seasonality =====
+    season = payday_effect(t, rng)
+
+    # ===== AR(1) shock =====
+    eta = priors.rho * last_row["demand_shock"] + rng.normal(0, priors.shock_std)
+
+    # ===== competitor reacts with lag =====
+    comp_price = update_competitor_price(last_row["price_competitor"], last_row["price_agent"], priors, rng)
+
+    # ===== demand reacts to CURRENT price =====
+    demand = compute_demand(
+        price,         # 👈 current price
+        comp_price,
+        season,
+        eta,
+        priors
+    )
+
+    # ===== revenue consistent with demand =====
+    revenue = (price - priors.unit_cost) * demand - priors.fixed_cost
+
+    return {
+        "price_agent": price,
+        "price_competitor": comp_price,
+        "season_signal": season,
+        "demand_shock": eta,
+        "realized_demand": demand,
+        "revenue": revenue
+    }
+
+def simulate(n_days, policy_fn, priors=MarketPriors, seed=42, start_df=None):
+
+    rng = np.random.default_rng(seed)
+
+    if start_df is None:
+
+        start_date = pd.Timestamp("2025-01-01")
+        
+        df = pd.DataFrame([{
+            "date": start_date,
+            "price_agent": 130,
+            "price_competitor": 120,
+            "season_signal": payday_effect(0, rng),
+            "demand_shock": 0.0,
+            "realized_demand": 50,
+            "revenue": 0
+        }])
+
+    else:
+        df = start_df.copy()
+
+    for _ in range(n_days):
+
+        # ===== choose price =====
+        new_price = policy_fn(df, priors, rng)
+
+        df.loc[df.index[-1], "price_agent"] = new_price
+
+        # ===== evolve environment =====
+        new_row = demand_step(df, policy_fn, priors, rng)
+
+        new_row["date"] = df.iloc[-1]["date"] + pd.Timedelta(days=1)
+
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+    return df
+
+def random_policy(df_hist, priors, rng):
+
+    return float(rng.uniform(priors.price_min, priors.price_max))
