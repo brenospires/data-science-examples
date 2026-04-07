@@ -7,27 +7,27 @@ class MarketPriors:
     def __init__(self):
 
         # Demand level
-        self.alpha = 1.8          # ↓ lower baseline to reduce mean demand
-        self.season_weight = 0.9  # ↑ stronger visible seasonality
+        self.alpha = 1.8          
+        self.season_weight = 0.9  
         self.ref_price = 130
 
-        # Elasticity (STRONG SIGNAL)
-        self.elasticity = 2.5     # ↓ slightly less aggressive (avoid killing demand)
-        self.season_elast_amp = 0.5  # ↑ strong state-dependent elasticity
-        self.gamma = 0.2  # ↑ stronger curvature (ensures interior optimum)
+        # Elasticity
+        self.elasticity = 2.5     
+        self.season_elast_amp = 0.5  
+        self.gamma = 0.2  
 
-        # Competition (STRONG)
-        self.cross_elasticity = 1.1   # ↓ reduce dominance over seasonality
-        self.rel_price_weight = 1.3   # ↓ still strong but less overpowering
+        # Competition 
+        self.cross_elasticity = 1.1   
+        self.rel_price_weight = 1.3   
 
         # Shocks
         self.rho = 0.6
-        self.shock_std = 0.10  # ↓ slightly less noise (clearer structure)
+        self.shock_std = 0.10  
 
         # Competitor dynamics
         self.comp_mean = 120
-        self.comp_noise = 5.0   # ↓ smoother competitor behavior
-        self.comp_follow = 0.20   # ↓ slightly less coupling
+        self.comp_noise = 5.0  
+        self.comp_follow = 0.20 
         self.comp_reversion = 0.08
 
         # Costs
@@ -42,9 +42,7 @@ class MarketPriors:
         self.max_demand = 200
 
 
-# =========================================================
 # Seasonality
-# =========================================================
 def payday_effect(t, rng, period=30):
 
     phase = (t % period) / period
@@ -57,7 +55,6 @@ def payday_effect(t, rng, period=30):
         payday_effect.cycle_amplitudes[cycle] = rng.lognormal(0.0, 0.25)
 
     amplitude = payday_effect.cycle_amplitudes[cycle]
-
     return amplitude * np.exp(-((phase - 0.1) ** 2) / 0.05)
 
 def update_competitor_price(last_comp, agent_price, last_demand, priors, rng):
@@ -72,9 +69,8 @@ def update_competitor_price(last_comp, agent_price, last_demand, priors, rng):
 
     base_price += 1.2 * demand_signal
 
-    # multiplicative noise (LESS than agent)
+    # multiplicative noise 
     sigma = 0.25
-
     price = base_price * np.exp(rng.normal(0, sigma))
 
     # rare exploration
@@ -83,25 +79,16 @@ def update_competitor_price(last_comp, agent_price, last_demand, priors, rng):
 
     return float(np.clip(price, priors.price_min, priors.price_max))
 
-# =========================================================
-# Stable demand (NO EXPLOSION)
-# =========================================================
 def compute_demand(price, comp_price, season, shock, priors):
 
     log_price = np.log(price / priors.ref_price)
     log_comp = np.log(comp_price / priors.ref_price)
 
-    # Relative price (important driver)
     rel_price = log_comp - log_price
 
     # State-dependent elasticity
-    #elasticity_t = priors.elasticity * (1 - priors.season_elast_amp * season)
     elasticity_t = priors.elasticity * np.exp(-priors.season_elast_amp * season)
 
-    # Smooth price transform (critical for stability)
-    #price_smooth = np.tanh(log_price)
-
-    # Latent score
     z = (
         priors.alpha
         + priors.season_weight * season
@@ -112,15 +99,9 @@ def compute_demand(price, comp_price, season, shock, priors):
         + priors.rel_price_weight * rel_price
     )
 
-    # Bounded demand (FIX)
-    demand = np.exp(z) # priors.max_demand / (1 + np.exp(-z))
-
+    demand = np.exp(z)
     return float(np.clip(demand, 1.0, priors.max_demand))
 
-
-# =========================================================
-# One step
-# =========================================================
 def demand_step(df_hist, policy_fn, priors, rng):
 
     t = len(df_hist)
@@ -156,10 +137,6 @@ def demand_step(df_hist, policy_fn, priors, rng):
         "revenue": profit
     }
 
-
-# =========================================================
-# Simulation
-# =========================================================
 def simulate(n_days, policy_fn, priors=None, seed=42, start_df=None):
 
     rng = np.random.default_rng(seed)
@@ -207,7 +184,6 @@ def exploration_policy(df_hist, priors, rng):
 
     # base anchor
     base_price = 0.2 * comp_price + 0.8 * priors.ref_price
-
     base_price += 2.0 * demand_norm
 
     sigma = 0.4   # controls log variance (~0.16)
